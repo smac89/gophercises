@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Choose Your Own Adventure</title>
+</head>
+<body>{{- /*gotype: gophercises.com/cyoa.Chapter*/ -}}
+<main style="display: flex; flex-direction: column; padding: 1rem 4rem; max-width: 80%; margin: 0 auto">
+    <div style="align-self: center; box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1); border-radius: .5rem; background-color: #f1ebd3; padding: 2rem; max-width: 56rem">
+        <h1>{{.Title}}</h1>
+        <div style="font-size: .9rem">
+            {{range .Paragraphs}}
+                <p style="width: 80%;">{{.}}</p>
+            {{end}}
+            {{if .Options}}
+            <hr/>
+            {{end}}
+            <ul>
+                {{range .Options}}
+                    <li>
+                        <a href="/{{.Chapter}}">{{.Text}}</a>
+                    </li>
+                {{end}}
+            </ul>
+        </div>
+    </div>
+</main>
+</body>
+</html>
