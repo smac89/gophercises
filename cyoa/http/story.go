@@ -10,8 +10,8 @@ import (
 )
 
 type HandlerOption struct {
-	tpl    *template.Template
-	pathFn func(r *http.Request) string
+	Tpl    *template.Template
+	PathFn func(r *http.Request) string
 }
 
 type storyHandler struct {
@@ -35,23 +35,23 @@ func init() {
 }
 
 func NewStoryHandler(s cyoa.Story, opt *HandlerOption) http.Handler {
-	handler := storyHandler{story: s, HandlerOption: HandlerOption{tpl: storyTemplate, pathFn: defaultPathFn}}
+	handler := storyHandler{story: s, HandlerOption: HandlerOption{Tpl: storyTemplate, PathFn: defaultPathFn}}
 	if opt != nil {
-		if opt.tpl != nil {
-			handler.tpl = opt.tpl
+		if opt.Tpl != nil {
+			handler.Tpl = opt.Tpl
 		}
-		if opt.pathFn != nil {
-			handler.pathFn = opt.pathFn
+		if opt.PathFn != nil {
+			handler.PathFn = opt.PathFn
 		}
 	}
 	return &handler
 }
 
 func (storyHandler *storyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	chapterPath := storyHandler.pathFn(r)
+	chapterPath := storyHandler.PathFn(r)
 
 	if chapter, ok := storyHandler.story[chapterPath]; ok {
-		err := storyHandler.tpl.Execute(w, chapter)
+		err := storyHandler.Tpl.Execute(w, chapter)
 		if err != nil {
 			log.Printf("error rendering template for story '%s'", chapterPath)
 			http.Error(w, "Something went wrong...", http.StatusInternalServerError)

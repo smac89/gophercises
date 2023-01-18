@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"gophercises.com/cyoa"
@@ -8,6 +9,8 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"os/signal"
+	"syscall"
 )
 
 func main() {
@@ -31,7 +34,27 @@ func main() {
 		panic(err)
 	}
 
-	h := cyoahttp.NewStoryHandler(story, nil)
-	log.Printf("Starting the server on port %d\n", port)
-	log.Fatal(http.ListenAndServe(fmt.Sprintf(":%d", port), h))
+	srv := startStoryServer(story, port, nil)
+	exit := make(chan os.Signal, 1)
+
+	signal.Notify(exit, os.Interrupt, syscall.SIGINT, syscall.SIGTERM)
+	<-exit
+
+	log.Println("Received shutdown signal")
+	if err := srv.Shutdown(context.Background()); err != nil {
+		log.Fatal(err)
+	}
+}
+
+func startStoryServer(story cyoa.Story, port int, handlerOpts *cyoahttp.HandlerOption) *http.Server {
+	h := cyoahttp.NewStoryHandler(story, handlerOpts)
+	srv := &http.Server{Addr: fmt.Sprintf(":%d", port), Handler: h}
+	go func() {
+		log.Printf("Starting the server on port %d\n", port)
+		if err := srv.ListenAndServe(); err != http.ErrServerClosed {
+			log.Fatal(err)
+		}
+		log.Println("Shutting down server")
+	}()
+	return srv
 }
