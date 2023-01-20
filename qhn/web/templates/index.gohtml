@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <title>Quiet Hacker News</title>
+    <link rel="icon" type="image/png" href="data:image/png;base64,iVBORw0KGgo=">
+    <script src="https://kit.fontawesome.com/e865d21dd3.js"
+            crossorigin="anonymous"></script>
+    <style>
+        body {
+            padding: 20px;
+        }
+
+        body, a {
+            color: #333;
+            font-family: sans-serif;
+        }
+
+        li {
+            padding: 4px 0;
+        }
+
+        .host {
+            color: #888;
+        }
+
+        .time {
+            color: #888;
+            padding: 10px 0;
+        }
+
+        .footer, .footer a {
+            color: #888;
+        }
+    </style>
+</head>
+<body>
+<main>
+    <h1>Quiet Hacker News</h1>
+    <ol>
+        {{range .Stories}} {{- /*gotype: gophercises.com/qhnweb/hn.Item[]*/ -}}
+        <li><a href="{{.URL}}" target="_blank">{{.Title}}</a> <i class="fa-solid fa-xs fa-arrow-up-right-from-square"></i> <span class="host">({{.Host}})</span></li>
+        {{end}}
+    </ol>
+    <p class="time">This page was rendered in {{.Time}}</p>
+</main>
+<footer>
+    <p class="footer">This page is heavily inspired by <a href="https://samuelstevens.me/elm-quiet-hn/" target="_blank">Quiet Hacker
+            News</a> and was adapted for a <a href="https://gophercises.com/exercises/quiet_hn">Gophercises Exercise</a>.
+    </p>
+</footer>
+</body>
+</html>
