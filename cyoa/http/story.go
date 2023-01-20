@@ -1,4 +1,4 @@
-package cyoa
+package http
 
 import (
 	"gophercises.com/cyoa"
