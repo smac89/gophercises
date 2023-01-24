@@ -2,12 +2,23 @@ package http
 
 import (
 	"context"
+	"encoding/gob"
 	"fmt"
+	"github.com/patrickmn/go-cache"
 	"gophercises.com/qhn/hn"
 	"gophercises.com/qhn/internal/util"
 	"html/template"
+	"log"
 	"net/http"
+	"sync"
 	"time"
+)
+
+const (
+	cacheKeyTopStories        = "topStories"             //A key used to represent the cached topStories
+	cacheKeyTopStoriesUpdated = "_" + cacheKeyTopStories //A key used to store freshly fetched topStories
+	cacheCleanupFreq          = time.Minute * 5          //The frequency at which old cache items are deleted
+	cacheStoriesExpireFreq    = time.Minute * 15
 )
 
 type HandlerOpts struct {
@@ -18,6 +29,8 @@ type handler struct {
 	*HandlerOpts
 	tpl        *template.Template
 	numStories uint
+	cache      *cache.Cache
+	cacheInit  *sync.Once
 }
 
 func (opts *HandlerOpts) fillDefaults() *HandlerOpts {
@@ -38,20 +51,45 @@ func NewHandler(numStories uint, tpl *template.Template, opts *HandlerOpts) http
 	return &handler{
 		tpl:         tpl,
 		numStories:  numStories,
+		cacheInit:   &sync.Once{},
 		HandlerOpts: opts,
 	}
 }
 
-func (hnd handler) ServeHTTP(w http.ResponseWriter, _ *http.Request) {
+func (hnd *handler) ServeHTTP(w http.ResponseWriter, _ *http.Request) {
+	start := time.Now()
+
+	stories := hnd.getStoriesFromCache()
+	if stories == nil {
+		var err error
+		stories, err = getStories(hnd.numStories, hnd.ParallelFetch)
+
+		if err != nil {
+			http.Error(w, fmt.Sprint(err), http.StatusInternalServerError)
+			return
+		}
+		hnd.cacheTopStories(stories)
+	}
+
+	data := util.TemplateData{
+		Stories: stories,
+		Time:    time.Now().Sub(start),
+	}
+	err := hnd.tpl.Execute(w, &data)
+	if err != nil {
+		http.Error(w, "Failed to process the template", http.StatusInternalServerError)
+		return
+	}
+}
+
+func getStories(numStories, concurrency uint) ([]util.Item, error) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	start := time.Now()
-	storyChannel, err := fetchTopStories(ctx, hnd.ParallelFetch)
+	storyChannel, err := streamTopStories(ctx, concurrency)
 
 	if err != nil {
-		http.Error(w, fmt.Sprint(err), http.StatusInternalServerError)
-		return
+		return nil, err
 	}
 	var (
 		stories      []util.Item
@@ -59,10 +97,11 @@ func (hnd handler) ServeHTTP(w http.ResponseWriter, _ *http.Request) {
 	)
 
 	for {
-		if storiesCount >= hnd.numStories {
+		if storiesCount >= numStories {
 			cancel()
 			break
 		}
+
 		if story, storyChannelOpen := <-storyChannel; storyChannelOpen {
 			stories = append(stories, *story)
 			storiesCount++
@@ -70,19 +109,10 @@ func (hnd handler) ServeHTTP(w http.ResponseWriter, _ *http.Request) {
 			break
 		}
 	}
-
-	data := util.TemplateData{
-		Stories: stories,
-		Time:    time.Now().Sub(start),
-	}
-	err = hnd.tpl.Execute(w, &data)
-	if err != nil {
-		http.Error(w, "Failed to process the template", http.StatusInternalServerError)
-		return
-	}
+	return stories, nil
 }
 
-func fetchTopStories(ctx context.Context, concurrency uint) (<-chan *util.Item, error) {
+func streamTopStories(ctx context.Context, concurrency uint) (<-chan *util.Item, error) {
 	var client hn.Client
 	ids, err := client.TopItems()
 	if err != nil {
@@ -186,4 +216,62 @@ func createChannelSlice[T any](size uint) []chan T {
 		channels[chIdx] = make(chan T)
 	}
 	return channels
+}
+
+func (hnd *handler) cacheTopStories(stories []util.Item) {
+	hnd.cache.Set(cacheKeyTopStories, stories, cacheStoriesExpireFreq)
+}
+
+func (hnd *handler) loadCache() {
+	gob.RegisterName("TopStories", make([]util.Item, 1))
+	c := util.LoadCacheFromDisk(cacheCleanupFreq)
+
+	c.OnEvicted(func(key string, _ interface{}) {
+		if key == cacheKeyTopStories {
+			log.Println("cached top stories expired")
+			if stories, found := c.Get(cacheKeyTopStoriesUpdated); found {
+				log.Println("refreshing top stories")
+				hnd.cacheTopStories(stories.([]util.Item))
+			}
+		}
+	})
+
+	go func() {
+		if cacheStoriesExpireFreq > time.Minute {
+			//A timer to fetch new items into the cache before it expires
+			cacheUpdateFreq := cacheStoriesExpireFreq - time.Minute
+			ticker := time.NewTicker(cacheUpdateFreq)
+			defer ticker.Stop()
+			for {
+				select {
+				case <-ticker.C:
+					if stories, err := getStories(hnd.numStories, hnd.ParallelFetch); err != nil {
+						log.Println("fetched fresh top stories")
+						c.SetDefault(cacheKeyTopStoriesUpdated, stories)
+					}
+					time.AfterFunc(time.Minute, func() {
+						ticker.Reset(cacheUpdateFreq)
+					})
+				}
+			}
+		}
+	}()
+
+	hnd.cache = c
+}
+
+func (hnd *handler) getStoriesFromCache() []util.Item {
+	if hnd.cache == nil {
+		hnd.cacheInit.Do(hnd.loadCache)
+	}
+	c := hnd.cache
+	if stories, found := c.Get(cacheKeyTopStories); found {
+		return stories.([]util.Item)
+	}
+
+	if stories, found := c.Get(cacheKeyTopStoriesUpdated); found {
+		hnd.cacheTopStories(stories.([]util.Item))
+		return stories.([]util.Item)
+	}
+	return nil
 }

@@ -26,7 +26,7 @@ func main() {
 	flag.Parse()
 
 	tpl := template.Must(template.ParseFiles("web/templates/index.gohtml"))
-	handler := httpHn.NewHandler(numStories, tpl, nil)
+	handler := httpHn.NewHandler(numStories, tpl, &httpHn.HandlerOpts{ParallelFetch: uint(float64(numStories) * 1.25)})
 
 	http.Handle("/", handler)
 	runtime.GOMAXPROCS(2)
@@ -34,86 +34,3 @@ func main() {
 	// Start the server
 	log.Fatal(http.ListenAndServe(fmt.Sprintf(":%d", port), nil))
 }
-
-//func handler(numStories int, tpl *template.Template) http.HandlerFunc {
-//	return func(w http.ResponseWriter, r *http.Request) {
-//		readChannel := make(chan int)
-//		ctx, cancel := context.WithCancel(context.Background())
-//		defer cancel()
-//
-//		start := time.Now()
-//		var client hn.Client
-//		ids, err := client.TopItems()
-//
-//		if err != nil {
-//			http.Error(w, "Failed to load top stories", http.StatusInternalServerError)
-//			return
-//		}
-//		var stories []item
-//		itemChans := make([]chan *hn.Item, parallelFetch)
-//		for chIdx := 0; chIdx < parallelFetch; chIdx++ {
-//			itemChans[chIdx] = make(chan *hn.Item)
-//		}
-//
-//		go func() {
-//			countFetched := 0
-//			defer func() {
-//				for _, ch := range itemChans {
-//					close(ch)
-//				}
-//			}()
-//			for _, id := range ids {
-//				select {
-//				case <-ctx.Done():
-//					return
-//				default:
-//					go fetchItemChan(itemChans[countFetched], &client, id)
-//					countFetched++
-//					if countFetched >= len(itemChans) {
-//						readChannel <- countFetched
-//						countFetched = <-readChannel
-//					}
-//				}
-//			}
-//		}()
-//
-//		go func() {
-//			for {
-//				select {
-//				case <-ctx.Done():
-//					return
-//				case countFetched := <-readChannel:
-//					for chIdx := 0; chIdx < countFetched; chIdx++ {
-//						rawItem := <-itemChans[chIdx]
-//						if rawItem != nil {
-//							item := parseHNItem(*rawItem)
-//							if isStoryLink(item) {
-//								stories = append(stories, item)
-//							}
-//						}
-//						if len(stories) >= numStories {
-//							for chIdx++; chIdx < countFetched; chIdx++ {
-//								//read the rest of the fetched items to prevent panic when channel closed
-//								<-itemChans[chIdx]
-//							}
-//							cancel()
-//						}
-//					}
-//					readChannel <- 0
-//				}
-//			}
-//		}()
-//
-//		<-ctx.Done()
-//
-//		data := templateData{
-//			Stories: stories[:numStories],
-//			Time:    time.Now().Sub(start),
-//		}
-//		err = tpl.Execute(w, data)
-//		if err != nil {
-//			http.Error(w, "Failed to process the template", http.StatusInternalServerError)
-//			return
-//		}
-//	}
-//}

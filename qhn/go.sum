@@ -1,0 +1,8 @@
+github.com/gophercises/quiet_hn v0.0.0-20190103182143-a46a1fecf2b8 h1:ZlBA3egmeh4f1Yjloh8XnMJ3T+S+Izhml8slZ6/TVug=
+github.com/gophercises/quiet_hn v0.0.0-20190103182143-a46a1fecf2b8/go.mod h1:Agx4e8Czcx2J/V+E1Dx/RZ3g5CBPD/QVxyk0SxRxHDo=
+github.com/jellydator/ttlcache/v3 v3.0.1 h1:cHgCSMS7TdQcoprXnWUptJZzyFsqs18Lt8VVhRuZYVU=
+github.com/jellydator/ttlcache/v3 v3.0.1/go.mod h1:WwTaEmcXQ3MTjOm4bsZoDFiCu/hMvNWLO1w67RXz6h4=
+github.com/patrickmn/go-cache v2.1.0+incompatible h1:HRMgzkcYKYpi3C8ajMPV8OFXaaRUnok+kx1WdO15EQc=
+github.com/patrickmn/go-cache v2.1.0+incompatible/go.mod h1:3Qf8kWWT7OJRJbdiICTKqZju1ZixQ/KpMGzzAfe6+WQ=
+golang.org/x/sync v0.0.0-20210220032951-036812b2e83c h1:5KslGYwFpkhGh+Q16bwMP3cOontH8FOep7tGV86Y7SQ=
+golang.org/x/sync v0.0.0-20210220032951-036812b2e83c/go.mod h1:RxMgew5VJxzue5/jJTE5uejpjVlOe/izrB70Jof72aM=
