@@ -12,29 +12,33 @@ const (
 	cacheFilePath = "qhn.gob" //The name of the cache file
 )
 
-func createCacheFromSource(source map[string]cache.Item, cacheCleanupFreq time.Duration) *cache.Cache {
-	var c *cache.Cache
+func createCacheFromSource(source map[string]cache.Item, cachePersistFreq time.Duration) *cache.Cache {
+	var (
+		c              *cache.Cache
+		cachePurgeFreq = cachePersistFreq + time.Minute
+	)
 	if source == nil {
-		c = cache.New(cache.NoExpiration, cacheCleanupFreq)
+		c = cache.New(cache.NoExpiration, cachePurgeFreq)
 	} else {
-		c = cache.NewFrom(cache.NoExpiration, cacheCleanupFreq, source)
+		c = cache.NewFrom(cache.NoExpiration, cachePurgeFreq, source)
 	}
 
 	go func() {
-		if cacheCleanupFreq >= time.Minute*2 {
+		if cachePersistFreq > 0 {
 			//cache is saved to disk a minute before it is purged
-			persistFreq := cacheCleanupFreq - time.Minute
-			ticker := time.NewTicker(persistFreq)
+			ticker := time.NewTicker(cachePersistFreq)
 			defer ticker.Stop()
 			for {
 				select {
 				case <-ticker.C:
 					time.AfterFunc(time.Minute, func() {
-						ticker.Reset(persistFreq)
+						ticker.Reset(cachePersistFreq)
 					})
 					persistCacheToDisk(c)
 				}
 			}
+		} else {
+			log.Printf("cache will not be persisted! frequency duration is not positive")
 		}
 	}()
 
@@ -55,13 +59,17 @@ func persistCacheToDisk(c *cache.Cache) {
 	} else {
 		log.Println("cache persisted to disk")
 	}
+	if err := encoder.Encode(time.Now()); err != nil {
+		log.Printf("failed to write to write last updated time to disk: %v\n", err)
+	}
 }
 
-func LoadCacheFromDisk(cacheCleanupFreq time.Duration) *cache.Cache {
+func LoadCacheFromDisk(cachePersistFreq time.Duration) (*cache.Cache, time.Time) {
 	encodeFile, err := os.OpenFile(cacheFilePath, os.O_RDONLY|os.O_CREATE, 0644)
+	lastCacheUpdate := time.UnixMilli(0)
 	if err != nil {
 		log.Printf("failed to load cache from disk: %v\n", err)
-		return createCacheFromSource(nil, cacheCleanupFreq)
+		return createCacheFromSource(nil, cachePersistFreq), lastCacheUpdate
 	}
 
 	defer encodeFile.Close()
@@ -73,5 +81,8 @@ func LoadCacheFromDisk(cacheCleanupFreq time.Duration) *cache.Cache {
 	} else {
 		log.Println("cache loaded from disk")
 	}
-	return createCacheFromSource(cacheItems, cacheCleanupFreq)
+	if err := decoder.Decode(&lastCacheUpdate); err != nil {
+		log.Printf("failed to decode last update time: %v\n", err)
+	}
+	return createCacheFromSource(cacheItems, cachePersistFreq), lastCacheUpdate
 }

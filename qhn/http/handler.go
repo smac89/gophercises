@@ -17,8 +17,8 @@ import (
 const (
 	cacheKeyTopStories        = "topStories"             //A key used to represent the cached topStories
 	cacheKeyTopStoriesUpdated = "_" + cacheKeyTopStories //A key used to store freshly fetched topStories
-	cacheCleanupFreq          = time.Minute * 5          //The frequency at which old cache items are deleted
-	cacheStoriesExpireFreq    = time.Minute * 15
+	cacheStoriesExpireFreq    = time.Minute * 30
+	cachePersistFreq          = cacheStoriesExpireFreq + time.Minute //The frequency with cache items are persisted
 )
 
 type HandlerOpts struct {
@@ -222,16 +222,22 @@ func (hnd *handler) cacheTopStories(stories []util.Item) {
 	hnd.cache.Set(cacheKeyTopStories, stories, cacheStoriesExpireFreq)
 }
 
+func (hnd *handler) checkStaleCache(lastRefreshTime time.Time) {
+	if time.Now().Sub(lastRefreshTime) > cacheStoriesExpireFreq {
+		hnd.cache.Flush()
+	}
+}
+
 func (hnd *handler) loadCache() {
 	gob.RegisterName("TopStories", make([]util.Item, 1))
-	c := util.LoadCacheFromDisk(cacheCleanupFreq)
+	c, lastUpdateTime := util.LoadCacheFromDisk(cachePersistFreq)
 
-	c.OnEvicted(func(key string, _ interface{}) {
+	c.OnEvicted(func(key string, _ any) {
 		if key == cacheKeyTopStories {
-			log.Println("cached top stories expired")
 			if stories, found := c.Get(cacheKeyTopStoriesUpdated); found {
-				log.Println("refreshing top stories")
 				hnd.cacheTopStories(stories.([]util.Item))
+				c.Delete(cacheKeyTopStoriesUpdated)
+				log.Println("refreshed top stories")
 			}
 		}
 	})
@@ -245,19 +251,27 @@ func (hnd *handler) loadCache() {
 			for {
 				select {
 				case <-ticker.C:
-					if stories, err := getStories(hnd.numStories, hnd.ParallelFetch); err != nil {
-						log.Println("fetched fresh top stories")
-						c.SetDefault(cacheKeyTopStoriesUpdated, stories)
-					}
 					time.AfterFunc(time.Minute, func() {
+						//reset the timer after a minute so that we always
+						//remain a minute behind the main cached items
 						ticker.Reset(cacheUpdateFreq)
 					})
+					if _, found := c.Get(cacheKeyTopStoriesUpdated); !found {
+						log.Println("pre-fetching top stories")
+						if stories, err := getStories(hnd.numStories, hnd.ParallelFetch); err != nil {
+							log.Printf("error pre-fetching stories: %v", err)
+						} else {
+							c.SetDefault(cacheKeyTopStoriesUpdated, stories)
+							log.Println("pre-fetched top stories")
+						}
+					}
 				}
 			}
 		}
 	}()
 
 	hnd.cache = c
+	hnd.checkStaleCache(lastUpdateTime)
 }
 
 func (hnd *handler) getStoriesFromCache() []util.Item {

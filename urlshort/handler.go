@@ -101,6 +101,6 @@ func BoltDbHandler(dbPath, dbBucket string, fallback http.Handler) (http.Handler
 	return MapHandler(pathsToUrl, fallback), nil
 }
 
-func (p *pathMap) UnmarshalYAML(unmarshal func(interface{}) error) error {
+func (p *pathMap) UnmarshalYAML(unmarshal func(any) error) error {
 	return unmarshal(&p.pathsToUrl)
 }
